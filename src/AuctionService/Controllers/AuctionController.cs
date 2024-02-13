@@ -4,6 +4,11 @@ using AuctionService.Entities;
 using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using AutoMapper.QueryableExtensions;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
 
 namespace AuctionService.Controllers;
 [ApiController]
@@ -18,13 +23,29 @@ public class AuctionController: ControllerBase
             _context = context;        
     }
     [HttpGet]
-    public async  Task<ActionResult<List<AuctionDto>>> GetAuctions()
+    public async Task<ActionResult<List<AuctionDto>>> GetAuctions(string date)
     {
-        var auctions = await  _context.Auctions
-            .Include(a => a.Item)
-            .OrderBy(a => a.Item.Make)
-            .ToListAsync(); 
-        return _mapper.Map<List<AuctionDto>>(auctions);
+        var query = _context.Auctions.OrderBy(x => x.Item.Make).AsQueryable();
+        
+          if (!string.IsNullOrEmpty(date))
+    {
+        if (DateTime.TryParse(date, out DateTime parsedDate))
+        {
+            var utcDate = parsedDate.AddSeconds(-1).ToUniversalTime();
+            query = query.Where(x => x.UpdatedAt.HasValue && x.UpdatedAt.Value.CompareTo(utcDate) > 0);
+        }
+        else
+        {
+            // 如果日期字符串无效，则返回一个错误消息
+            return BadRequest("Invalid date format.");
+        }
+    }
+        // var auctions = await query
+        //     .Include(a => a.Item)
+        //     .OrderBy(a => a.Item.Make)
+        //     .ToListAsync();
+        // return _mapper.Map<List<AuctionDto>>(auctions);
+        return await  query.ProjectTo<AuctionDto>(_mapper.ConfigurationProvider).ToListAsync();
     }
     [HttpGet("{id}")]
     public async Task<ActionResult<AuctionDto>> GetAuctionById(Guid id)
